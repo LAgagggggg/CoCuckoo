@@ -25,6 +25,9 @@ using namespace std;
 const int capacity = 1 << __SC_POWER;
 const uint32_t MAX_SIZE  = 1 << __SC_POWER;
 #define TABLE_COUNT 2  
+
+
+
 #define BREAK_THRESHOLD 200000
 const int INIT_ITEM_COUNT = MAX_SIZE * TABLE_COUNT;
 

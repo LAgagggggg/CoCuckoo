@@ -1,4 +1,7 @@
 #include "./smartcuckoo.h"
+#include "CoCuckoo.h"
+
+using namespace std;
 
 int main(int argc, char const *argv[])
 {
@@ -9,7 +12,7 @@ int main(int argc, char const *argv[])
     insert("wtf");
 
     int result = search("hhhhh");
-    printf("%d", result);
-    
+    printf("%d\n", result);
+
     return 0;
 }

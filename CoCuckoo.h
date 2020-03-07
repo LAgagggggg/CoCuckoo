@@ -16,8 +16,10 @@
 #include <vector>
 
 typedef std::string DataType;
-#define __SC_POWER 20
 
-using namespace std;
+void cocuckoo_init();
+void cocuckoo_insert();
+
+
 
 #endif
