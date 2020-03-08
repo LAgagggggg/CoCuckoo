@@ -21,6 +21,7 @@ typedef std::string DataType;
 
 typedef struct keyvalue_item
 {
+    bool occupied;
     DataType key;
     DataType value;
 } KeyValueItem;

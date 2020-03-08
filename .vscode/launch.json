@@ -6,15 +6,15 @@
     "configurations": [
         {
             "name": "launch",
-            "type": "lldb",
+            "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/myTest",
             "args": [],
-            "stopAtEntry": true,
+            "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
             "externalConsole": false,
-            "MIMode": "lldb",
+            "MIMode": "gdb",
             "preLaunchTask": "make"
         }
     ]
