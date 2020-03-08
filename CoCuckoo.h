@@ -15,11 +15,25 @@
 #include <stdint.h>
 #include <vector>
 
+using namespace std;
+
 typedef std::string DataType;
 
-void cocuckoo_init();
-void cocuckoo_insert();
+typedef struct keyvalue_item
+{
+    DataType key;
+    DataType value;
+} KeyValueItem;
+
+typedef struct cocuckoo_hashtable
+{
+    KeyValueItem * data;
+    uint32_t size;
+} CocuckooHashTable;
 
 
+CocuckooHashTable * cocuckooInit();
+int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType &value);
+DataType * cocuckooQuery(CocuckooHashTable &table, const DataType &key);
 
 #endif
