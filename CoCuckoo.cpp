@@ -1,6 +1,6 @@
 #include "CoCuckoo.h"
 
-#define __SC_POWER 6;
+#define __SC_POWER 5;
 static const uint32_t MAX_SIZE = 1 << __SC_POWER;
 static const uint32_t KICK_THRESHOLD = 10;
 
@@ -63,9 +63,6 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
     // If one of the buckets is valid, do insert
     if (!table.data[ha].occupied)
     {
-        // table.data[ha].key = key;
-        // table.data[ha].value = value;
-        // table.data[ha].valid = false;
         table.data[ha] = item;
         return 0;
     }
