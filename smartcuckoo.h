@@ -23,29 +23,29 @@
 using namespace std;
 
 const int capacity = 1 << __SC_POWER;
-const uint32_t MAX_SIZE  = 1 << __SC_POWER;
+const uint32_t INIT_SIZE  = 1 << __SC_POWER;
 #define TABLE_COUNT 2  
 
 
 
 #define BREAK_THRESHOLD 200000
-const int INIT_ITEM_COUNT = MAX_SIZE * TABLE_COUNT;
+const int INIT_ITEM_COUNT = INIT_SIZE * TABLE_COUNT;
 
 struct Node {
     int app;    
     int occu;   
     int sub;    
-} node[TABLE_COUNT][MAX_SIZE];
+} node[TABLE_COUNT][INIT_SIZE];
 
-Data table[TABLE_COUNT][MAX_SIZE];
+Data table[TABLE_COUNT][INIT_SIZE];
 
 struct UFSet *pset;             
-int sub_group[MAX_SIZE];    
-int group_isfull[MAX_SIZE]; 
+int sub_group[INIT_SIZE];    
+int group_isfull[INIT_SIZE]; 
 
 
-int subnumber_table[MAX_SIZE];
-int groupnumber_table[MAX_SIZE];
+int subnumber_table[INIT_SIZE];
+int groupnumber_table[INIT_SIZE];
 int sub_queue_front;
 int sub_queue_rear;
 int group_queue_front;
@@ -68,7 +68,7 @@ uint32_t defaultHash(const Key &k, uint32_t seed) {
 
 void Hash(const Data &k)
 {
-	uint32_t mask = MAX_SIZE - 1;
+	uint32_t mask = INIT_SIZE - 1;
 	hh[0] = defaultHash(k, seeds[0]) & mask;
 	hh[1] = defaultHash(k, seeds[1]) & mask;
 }
@@ -77,7 +77,7 @@ void init()
 {                 
     for (int i = 0; i < TABLE_COUNT; i++)
     {
-        for (int j = 0; j < MAX_SIZE; j++)
+        for (int j = 0; j < INIT_SIZE; j++)
         {
             table[i][j] = -1;      
             node[i][j].app = 0; 
@@ -86,24 +86,24 @@ void init()
         }
     }
 
-    for (int i = 0; i < MAX_SIZE; i++)
+    for (int i = 0; i < INIT_SIZE; i++)
     {
         sub_group[i] = -1;
         group_isfull[i] = -2;
     }
 
 
-    for (int i = 0; i < MAX_SIZE; i++)
+    for (int i = 0; i < INIT_SIZE; i++)
     {
         subnumber_table[i] = i;  
         groupnumber_table[i] = i; 
     }
     sub_queue_front = 0;
-    sub_queue_rear = MAX_SIZE - 1;
+    sub_queue_rear = INIT_SIZE - 1;
     group_queue_front = 0;
-    group_queue_rear = MAX_SIZE - 1;
+    group_queue_rear = INIT_SIZE - 1;
 
-    pset = newUFSet(MAX_SIZE);
+    pset = newUFSet(INIT_SIZE);
 
     for (int i = 0; i < 2; i++) {
         seeds[i] = uint32_t(rand());
@@ -179,7 +179,7 @@ int find_sub_num()
     int i;
 
     i = subnumber_table[sub_queue_front];
-    sub_queue_front = (sub_queue_front + 1) % (MAX_SIZE);
+    sub_queue_front = (sub_queue_front + 1) % (INIT_SIZE);
 
     return i;
 }
@@ -187,7 +187,7 @@ int find_sub_num()
 int find_group_num()
 {
     int i = groupnumber_table[group_queue_front];
-    group_queue_front = (group_queue_front + 1) % (MAX_SIZE);
+    group_queue_front = (group_queue_front + 1) % (INIT_SIZE);
 
     return i;
 }
@@ -196,7 +196,7 @@ void change_subgraph_num(int pre, int cur)
 {
     int i;
 
-    for (i = 0; i < MAX_SIZE; i++)
+    for (i = 0; i < INIT_SIZE; i++)
     {
         if (sub_group[i] == pre)
         {
@@ -205,7 +205,7 @@ void change_subgraph_num(int pre, int cur)
     }
 
     groupnumber_table[group_queue_rear] = pre;
-    group_queue_rear = (group_queue_rear + 1) % (MAX_SIZE);
+    group_queue_rear = (group_queue_rear + 1) % (INIT_SIZE);
 }
 
 int search(const Data &m) {

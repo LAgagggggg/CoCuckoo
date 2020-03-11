@@ -19,22 +19,24 @@ using namespace std;
 
 typedef std::string DataType;
 
-typedef struct keyvalue_item
+struct KeyValueItem
 {
     bool occupied;
     DataType key;
     DataType value;
-} KeyValueItem;
+};
 
-typedef struct cocuckoo_hashtable
+struct CocuckooHashTable
 {
     KeyValueItem * data;
-    uint32_t size;
-} CocuckooHashTable;
+    uint32_t size; // Amount of buckets
+    uint32_t count; // Buckets used
+};
 
 
 CocuckooHashTable * cocuckooInit();
 int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType &value);
 DataType * cocuckooQuery(CocuckooHashTable &table, const DataType &key);
+int cocuckooRemove(CocuckooHashTable &table, const DataType &key);
 
 #endif
