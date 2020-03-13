@@ -12,7 +12,6 @@ using namespace std;
 typedef string Key;
 
 int cocuckooDoubleSize(CocuckooHashTable &table);
-bool performKickOut(CocuckooHashTable &table, KeyValueItem item, int positon);
 
 static uint32_t defaultHash(const Key &k, uint32_t seed)
 {
@@ -26,6 +25,7 @@ static void Hash(const DataType &k, uint32_t size)
     uint32_t mask = size - 1;
     hh[0] = defaultHash(k, seeds[0]) & mask;
     hh[1] = defaultHash(k, seeds[1]) & mask;
+    void cocuckoo_insert();
 }
 
 CocuckooHashTable *cocuckooInit()
@@ -35,21 +35,11 @@ CocuckooHashTable *cocuckooInit()
     table->data = (KeyValueItem *)(malloc(INIT_SIZE * sizeof(KeyValueItem)));
     table->size = INIT_SIZE;
     table->count = 0;
-    table->isSubgraphMaximal = (bool *)(malloc(INIT_SIZE * sizeof(bool)));
-    table->subgraphIDs = (int *)(malloc(INIT_SIZE * sizeof(int)));
-    // subgraphID default to -1
-    for (int i = 0; i < table->size; i++)
-    {
-        table->subgraphIDs[i] = -1;
-    }
-    
 
     for (int i = 0; i < 2; i++)
     {
         seeds[i] = uint32_t(rand());
     }
-
-    table->ufsetP = newUFSet(INIT_SIZE);
 
     return table;
 }
@@ -61,7 +51,6 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
     Hash(key, table.size);
     ha = hh[0];
     hb = hh[1];
-    printf("hash of %s: %u & %u\n", key.c_str(), ha, hb);
     // wrap data
     KeyValueItem item = {.occupied = true, .key = key, .value = value};
 
@@ -77,106 +66,29 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
         return 1;
     }
 
-    UFSet & ufsetP = *(table.ufsetP);
-    bool * isSubgraphMaximal = table.isSubgraphMaximal;
-    // TwoEmpty
-    if (table.subgraphIDs[ha] == -1 && table.subgraphIDs[hb] == -1)
-    {
-        // printf("Insert: TwoEmpty\n");
-        table.data[ha] = item;
-        table.data[ha].occupied = true;
-        table.count++;
-        // modify graph
-        ufsetP.id[ha] = hb;
-        table.subgraphIDs[ha] = find(&ufsetP, ha);
-        table.subgraphIDs[hb] = table.subgraphIDs[ha];
-        return 0;
-    }
-    
-
-    // OneEmpty
     // If one of the buckets is valid, do insert
-    if (table.subgraphIDs[ha] == -1)
+    if (!table.data[ha].occupied)
     {
-        // printf("Insert: OneEmpty\n");
         table.data[ha] = item;
-        table.data[ha].occupied = true;
         table.count++;
-        // modify graph
-        ufsetP.id[ha] = hb;
-        table.subgraphIDs[ha] = table.subgraphIDs[hb];
         return 0;
     }
-    else if (table.subgraphIDs[hb] == -1)
+    else if (!table.data[hb].occupied)
     {
-        // printf("Insert: OneEmpty\n");
         table.data[hb] = item;
-        table.data[hb].occupied = true;
         table.count++;
-        // modify graph
-        ufsetP.id[hb] = ha;
-        table.subgraphIDs[hb] = table.subgraphIDs[ha];
         return 0;
     }
 
-    // ZeroEmpty
-    int setNumberA = find(&ufsetP,ha);
-    int setNumberB = find(&ufsetP,hb);
-    if (isSubgraphMaximal[setNumberA] && isSubgraphMaximal[setNumberB]) {
-        printf("Insert fail predicted! Should resize now\n");
-        return 0;
-    }
-    else if (!isSubgraphMaximal[setNumberA] && !isSubgraphMaximal[setNumberB]) {
-        // if (table.subgraphIDs[ha] == table.subgraphIDs[hb])
-        if (setNumberA == setNumberB)
-        {
-            // printf("InsertSameNon\n");
-            isSubgraphMaximal[setNumberA] = true;
-            performKickOut(table, item, ha);
-            return 0;
-        }
-        else
-        {
-            // printf("InsertDiffNonNon\n");
-            performKickOut(table, item, ha);
-            merge(&ufsetP, ha, hb);
-            table.subgraphIDs[ha] = find(&ufsetP, ha);
-            table.subgraphIDs[hb] = table.subgraphIDs[ha];
-            return 0;
-        }
-    }
-    else if (isSubgraphMaximal[setNumberA]) {
-            // printf("InsertDiffNonMax\n");
-            isSubgraphMaximal[table.subgraphIDs[ha]] == true;
-            performKickOut(table, item, ha);
-            merge(&ufsetP, ha, hb);
-            return 0;
-    }
-    else {
-            // printf("InsertDiffNonMax\n");
-            isSubgraphMaximal[table.subgraphIDs[hb]] == true;
-            performKickOut(table, item, hb);
-            merge(&ufsetP, ha, hb);
-            return 0;
-    }
-
-    return 0;
-}
-
-bool performKickOut(CocuckooHashTable &table, KeyValueItem item, int insertPosition) {
+    // None of the buckets is valid, perform kick out
     KeyValueItem insertItem = item;
+    int t = time(NULL) % 2;
+    int insertPosition = hh[t];
     KeyValueItem kickedItem = table.data[insertPosition];
 
     for (int i = 0; i < KICK_THRESHOLD; i++)
     {
         table.data[insertPosition] = insertItem;
-
-        if (!kickedItem.occupied)
-        {
-            table.count++;
-            return true;
-        }
-        
         Hash(kickedItem.key, table.size);
         int alternatePositon = hh[0] == insertPosition ? hh[1] : hh[0];
 
@@ -184,9 +96,8 @@ bool performKickOut(CocuckooHashTable &table, KeyValueItem item, int insertPosit
         {
             // put in and insert successed
             table.data[alternatePositon] = kickedItem;
-            table.data[alternatePositon].occupied = true;
             table.count++;
-            return true;
+            return 0;
         }
         else
         {
@@ -195,7 +106,13 @@ bool performKickOut(CocuckooHashTable &table, KeyValueItem item, int insertPosit
             insertPosition = alternatePositon;
         }
     }
-    return false;
+
+    // Limit exceeded, expand the table
+    cocuckooDoubleSize(table);
+    // Insert the item after resizing
+    cocuckooInsert(table, key, value);
+
+    return 0;
 }
 
 int cocuckooDoubleSize(CocuckooHashTable &table)

@@ -16,16 +16,20 @@ int main(int argc, char const *argv[])
     insert("wtf");
     
     //insert into CoCuckoo
-    for (int i = 0; i < 35; i++)
+    for (int i = 0; i < 34; i++)
     {
         string s = "test";
         s += to_string(i);
+        // if (i==23) {
+        //     printTable(table);
+        // }
         cocuckooInsert(table, s, "value");
+        
     }
 
     cocuckooRemove(table, "test16");
     //check
-    for (int i = 0; i < 35; i++)
+    for (int i = 0; i < 34; i++)
     {
         string s = "test";
         s += to_string(i);
@@ -61,4 +65,5 @@ void printTable(CocuckooHashTable &table) {
         }
         i++;
     }
+    putchar('\n');
 }

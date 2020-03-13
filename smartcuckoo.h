@@ -255,7 +255,7 @@ int insert(const Data &m)
     }
 
     v_num = judge_v_num(ha, hb);
-    if (v_num == 2)
+    if (v_num == 2) // 2 vacant bucket
     {	
         temp = find_sub_num();      
 
@@ -304,7 +304,7 @@ int insert(const Data &m)
             exit(-1);
         }
 
-        if ((isfull_one == 0) && (isfull_two == 0))
+        if ((isfull_one == 0) && (isfull_two == 0)) // All full
         {	
             node[0][ha].app--;
             node[1][hb].app--;

@@ -29,11 +29,8 @@ struct KeyValueItem
 struct CocuckooHashTable
 {
     KeyValueItem * data;
-    int * subgraphIDs;
     uint32_t size; // Amount of buckets
     uint32_t count; // Buckets used
-    UFSet * ufsetP; // Pointer of UFSet
-    bool * isSubgraphMaximal;
 };
 
 
