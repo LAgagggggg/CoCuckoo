@@ -5,29 +5,40 @@ static const uint32_t INIT_SIZE = 1 << __SC_POWER;
 static const uint32_t KICK_THRESHOLD = 10;
 
 static uint32_t seeds[2];
-static uint32_t hh[2];
 
 using namespace std;
 
 typedef string Key;
 
+//******** Function Declare ********
 int cocuckooDoubleSize(CocuckooHashTable &table);
 bool performKickOut(CocuckooHashTable &table, KeyValueItem item, int positon);
+//**********************************
 
-static uint32_t defaultHash(const Key &k, uint32_t seed)
+//******** Hash Func ********
+typedef uint32_t HashValueType;
+struct HashValue
 {
-    uint32_t h;
+    HashValueType a;
+    HashValueType b;
+};
+static HashValueType defaultHash(const Key &k, uint32_t seed)
+{
+    HashValueType h;
     MurmurHash3_x86_32(k.c_str(), k.size(), seed, &h);
     return h;
 }
-
-static void Hash(const DataType &k, uint32_t size)
+static HashValue Hash(const DataType &k, uint32_t size)
 {
-    uint32_t mask = size - 1;
-    hh[0] = defaultHash(k, seeds[0]) & mask;
-    hh[1] = defaultHash(k, seeds[1]) & mask;
+    HashValueType mask = size - 1;
+    HashValue value = {defaultHash(k, seeds[0]) & mask, defaultHash(k, seeds[1]) & mask};
+    // hh[0] = defaultHash(k, seeds[0]) & mask;
+    // hh[1] = defaultHash(k, seeds[1]) & mask;
+    return value;
 }
+//**************************
 
+//********* Implement ***********
 CocuckooHashTable *cocuckooInit()
 {
 
@@ -37,6 +48,7 @@ CocuckooHashTable *cocuckooInit()
     table->count = 0;
     table->isSubgraphMaximal = (bool *)(malloc(INIT_SIZE * sizeof(bool)));
     table->subgraphIDs = (int *)(malloc(INIT_SIZE * sizeof(int)));
+    table->ufsetP = newUFSet(INIT_SIZE);
     // subgraphID default to -1
     for (int i = 0; i < table->size; i++)
     {
@@ -49,8 +61,6 @@ CocuckooHashTable *cocuckooInit()
         seeds[i] = uint32_t(rand());
     }
 
-    table->ufsetP = newUFSet(INIT_SIZE);
-
     return table;
 }
 
@@ -58,9 +68,9 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
 {
 
     int ha, hb;
-    Hash(key, table.size);
-    ha = hh[0];
-    hb = hh[1];
+    auto hashValue = Hash(key, table.size);
+    ha = hashValue.a;
+    hb = hashValue.b;
     printf("hash of %s: %u & %u\n", key.c_str(), ha, hb);
     // wrap data
     KeyValueItem item = {.occupied = true, .key = key, .value = value};
@@ -124,6 +134,8 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
     int setNumberB = find(&ufsetP,hb);
     if (isSubgraphMaximal[setNumberA] && isSubgraphMaximal[setNumberB]) {
         printf("Insert fail predicted! Should resize now\n");
+        cocuckooDoubleSize(table);
+        cocuckooInsert(table, key, value);
         return 0;
     }
     else if (!isSubgraphMaximal[setNumberA] && !isSubgraphMaximal[setNumberB]) {
@@ -177,8 +189,8 @@ bool performKickOut(CocuckooHashTable &table, KeyValueItem item, int insertPosit
             return true;
         }
         
-        Hash(kickedItem.key, table.size);
-        int alternatePositon = hh[0] == insertPosition ? hh[1] : hh[0];
+        auto hashValue = Hash(kickedItem.key, table.size);
+        int alternatePositon = hashValue.a == insertPosition ? hashValue.b : hashValue.a;
 
         if (!table.data[alternatePositon].occupied)
         {
@@ -205,6 +217,15 @@ int cocuckooDoubleSize(CocuckooHashTable &table)
     KeyValueItem *newData = (KeyValueItem *)(malloc(table.size * sizeof(KeyValueItem)));
     KeyValueItem *oldData = table.data;
     table.data = newData;
+    table.isSubgraphMaximal = (bool *)(malloc(table.size * sizeof(bool)));
+    table.subgraphIDs = (int *)(malloc(table.size * sizeof(int)));
+    table.ufsetP = newUFSet(table.size);
+    // subgraphID default to -1
+    for (int i = 0; i < table.size; i++)
+    {
+        table.subgraphIDs[i] = -1;
+    }
+
     for (int i = 0; i < oldSize; i++)
     {
         KeyValueItem &item = oldData[i];
@@ -220,9 +241,9 @@ DataType *cocuckooQuery(CocuckooHashTable &table, const DataType &key)
 {
 
     int ha, hb;
-    Hash(key, table.size);
-    ha = hh[0];
-    hb = hh[1];
+    auto hashValue = Hash(key, table.size);
+    ha = hashValue.a;
+    hb = hashValue.b;
 
     if (table.data[ha].occupied &&  table.data[ha].key == key)
     {
@@ -241,9 +262,9 @@ DataType *cocuckooQuery(CocuckooHashTable &table, const DataType &key)
 int cocuckooRemove(CocuckooHashTable &table, const DataType &key)
 {
     int ha, hb;
-    Hash(key, table.size);
-    ha = hh[0];
-    hb = hh[1];
+    auto hashValue = Hash(key, table.size);
+    ha = hashValue.a;
+    hb = hashValue.b;
 
     if (table.data[ha].occupied && table.data[ha].key == key)
     {

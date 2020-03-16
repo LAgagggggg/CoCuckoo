@@ -16,7 +16,7 @@ int main(int argc, char const *argv[])
     insert("wtf");
     
     //insert into CoCuckoo
-    for (int i = 0; i < 34; i++)
+    for (int i = 0; i < 40; i++)
     {
         string s = "test";
         s += to_string(i);
@@ -29,7 +29,7 @@ int main(int argc, char const *argv[])
 
     cocuckooRemove(table, "test16");
     //check
-    for (int i = 0; i < 34; i++)
+    for (int i = 0; i < 40; i++)
     {
         string s = "test";
         s += to_string(i);
