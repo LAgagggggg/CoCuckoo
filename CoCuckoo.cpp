@@ -132,8 +132,6 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
         table.data[ha].occupied = true;
         table.count++;
 
-        unlockSubgraph(table, table.subgraphIDs[ha]);
-
         return 0;
     }
     else if (table.subgraphIDs[hb] == -1)
@@ -149,8 +147,6 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
         table.data[hb].occupied = true;
         table.count++;
 
-        unlockSubgraph(table, table.subgraphIDs[ha]);
-
         return 0;
     }
 
@@ -160,10 +156,10 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
     if (isSubgraphMaximal[setNumberA] && isSubgraphMaximal[setNumberB]) {
         printf("Insert fail predicted! Should resize now\n");
 
-        unlockSubgraph(table, table.subgraphIDs[ha]);
-        if (table.subgraphIDs[ha] != table.subgraphIDs[hb]) 
+        unlockSubgraph(table, setNumberA);
+        if (setNumberA != setNumberB) 
         {
-            unlockSubgraph(table, table.subgraphIDs[hb]);
+            unlockSubgraph(table, setNumberB);
         }
         
         cocuckooDoubleSize(table);
@@ -176,7 +172,7 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
         {
             // printf("InsertSameNon\n");
             isSubgraphMaximal[setNumberA] = true;
-            unlockSubgraph(table, table.subgraphIDs[ha]);
+            unlockSubgraph(table, setNumberA);
             performKickOut(table, item, ha);
             return 0;
         }
@@ -195,8 +191,8 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
     else if (isSubgraphMaximal[setNumberA]) {
             // printf("InsertDiffNonMax\n");
             isSubgraphMaximal[table.subgraphIDs[ha]] == true;
-            unlockSubgraph(table, table.subgraphIDs[ha]);
-            unlockSubgraph(table, table.subgraphIDs[hb]);
+            unlockSubgraph(table, setNumberA);
+            unlockSubgraph(table, setNumberB);
             performKickOut(table, item, ha);
             merge(&ufsetP, ha, hb);
             return 0;
@@ -204,8 +200,8 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
     else {
             // printf("InsertDiffNonMax\n");
             isSubgraphMaximal[table.subgraphIDs[hb]] == true;
-            unlockSubgraph(table, table.subgraphIDs[ha]);
-            unlockSubgraph(table, table.subgraphIDs[hb]);
+            unlockSubgraph(table, setNumberA);
+            unlockSubgraph(table, setNumberB);
             performKickOut(table, item, hb);
             merge(&ufsetP, ha, hb);
             return 0;
@@ -218,7 +214,7 @@ bool performKickOut(CocuckooHashTable &table, KeyValueItem item, int insertPosit
     KeyValueItem insertItem = item;
     KeyValueItem kickedItem = table.data[insertPosition];
 
-    for (int i = 0; i < KICK_THRESHOLD; i++)
+    while (1)
     {
         table.data[insertPosition] = insertItem;
 
@@ -246,7 +242,6 @@ bool performKickOut(CocuckooHashTable &table, KeyValueItem item, int insertPosit
             insertPosition = alternatePositon;
         }
     }
-    return false;
 }
 
 int cocuckooDoubleSize(CocuckooHashTable &table)
@@ -325,8 +320,8 @@ int cocuckooRemove(CocuckooHashTable &table, const DataType &key)
 void lockTwoSubgraph(CocuckooHashTable &table, HashValueType pos1, HashValueType pos2) {
     while (1)
     {
-        int subgraphNumberA = table.subgraphIDs[pos1];
-        int subgraphNumberB = table.subgraphIDs[pos2];
+        int subgraphNumberA = table.subgraphIDs[find(table.ufsetP, pos1)];
+        int subgraphNumberB = table.subgraphIDs[find(table.ufsetP, pos2)];
         if (subgraphNumberB < subgraphNumberA)
         {
             swap(subgraphNumberA, subgraphNumberB);
@@ -344,7 +339,14 @@ void lockTwoSubgraph(CocuckooHashTable &table, HashValueType pos1, HashValueType
                 lockSubgraph(table, subgraphNumberB);
             }
         }
-        if (subgraphNumberA == table.subgraphIDs[pos1] && subgraphNumberB == table.subgraphIDs[pos2])
+        // Check contigeous
+        int asubgraphNumberA = table.subgraphIDs[find(table.ufsetP, pos1)];
+        int asubgraphNumberB = table.subgraphIDs[find(table.ufsetP, pos2)];
+        if (asubgraphNumberB < asubgraphNumberA)
+        {
+            swap(asubgraphNumberA, asubgraphNumberB);
+        }
+        if (subgraphNumberA == asubgraphNumberA && subgraphNumberB == asubgraphNumberB)
         {
             break;
         }
