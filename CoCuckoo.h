@@ -9,13 +9,12 @@
 #include <sys/types.h>
 #include <string>
 
-#include "union_find.h"
-#include "MurmurHash3.h"
 #include <inttypes.h>
 #include <stdint.h>
 #include <vector>
 
 #include <pthread.h>
+#include "union_find.h"
 #include "spinlock.h"
 
 using namespace std;
@@ -33,8 +32,9 @@ struct CocuckooHashTable
 {
     KeyValueItem * data;
     int * subgraphIDs;
-    uint32_t size; // Amount of buckets
-    uint32_t count; // Buckets used
+    uint64_t size; // Amount of buckets
+    uint64_t count; // Buckets used
+    uint64_t seeds[2]; // Seed for hash
     UFSet * ufsetP; // Pointer of UFSet
     bool * isSubgraphMaximal;
     spinlock * locks;
