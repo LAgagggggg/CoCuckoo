@@ -15,6 +15,9 @@
 #include <stdint.h>
 #include <vector>
 
+#include <pthread.h>
+#include "spinlock.h"
+
 using namespace std;
 
 typedef std::string DataType;
@@ -34,6 +37,8 @@ struct CocuckooHashTable
     uint32_t count; // Buckets used
     UFSet * ufsetP; // Pointer of UFSet
     bool * isSubgraphMaximal;
+    spinlock * locks;
+    spinlock lockForSubgraphIDs;
 };
 
 
