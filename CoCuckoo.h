@@ -8,6 +8,8 @@
 #include <string.h>
 #include <sys/types.h>
 #include <string>
+#include <time.h>
+#include <ctype.h>
 
 #include <inttypes.h>
 #include <stdint.h>
@@ -39,6 +41,7 @@ struct CocuckooHashTable
     bool * isSubgraphMaximal;
     spinlock * locks;
     spinlock lockForSubgraphIDs;
+    uint32_t thread_num;
 };
 
 
