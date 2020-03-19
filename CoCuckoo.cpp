@@ -3,7 +3,7 @@
 #include "MurmurHash3.h"
 #include "hash.h"
 
-#define __SC_POWER 10;
+#define __SC_POWER 19;
 static const uint64_t INIT_SIZE = 1 << __SC_POWER;
 static const uint64_t KICK_THRESHOLD = 100;
 
