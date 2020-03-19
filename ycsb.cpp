@@ -17,7 +17,7 @@ typedef struct sub_thread{
     pthread_t thread;
     uint32_t id;
     uint64_t inserted;
-    CocuckooHashTable & table;
+    CocuckooHashTable *table;
     thread_queue* run_queue;
 } sub_thread;
 
@@ -25,13 +25,13 @@ void ycsb_thread_run(void* arg){
     sub_thread* subthread = (sub_thread *)arg;
     int i = 0;
     printf("Thread %d is opened\n", subthread->id);
-    for(; i < READ_WRITE_NUM/subthread->table.thread_num; i++){
+    for(; i < READ_WRITE_NUM/subthread->table->thread_num; i++){
         if( subthread->run_queue[i].operation == 1){
-            if (cocuckooInsert(subthread->table, subthread->run_queue[i].key, subthread->run_queue[i].key)==0){   
+            if (cocuckooInsert(*(subthread->table), subthread->run_queue[i].key, subthread->run_queue[i].key)==0){   
                 subthread->inserted ++;
             }
         }else{
-            if(cocuckooQuery(subthread->table, subthread->run_queue[i].key)!=NULL)
+            if(cocuckooQuery(*(subthread->table), subthread->run_queue[i].key)!=NULL)
                 // Get value
                 ;
         }
@@ -78,7 +78,7 @@ int main(int argc, char* argv[])
 		}
 	}
 	fclose(ycsb);
-    printf("Load phase finishes: %lu items are inserted \n", inserted);
+    printf("Load phase finishes: %llu items are inserted \n", inserted);
 
     if((ycsb_read = fopen("./workloads/rw-50-50-run.txt","r")) == NULL)
     {
@@ -119,7 +119,7 @@ int main(int argc, char* argv[])
     clock_gettime(CLOCK_MONOTONIC, &start);	
     for(t = 0; t < thread_num; t++){
         THREADS[t].id = t;
-        THREADS[t].table = table;
+        THREADS[t].table = &table;
         THREADS[t].inserted = 0;
         THREADS[t].run_queue = run_queue[t];
         pthread_create(&THREADS[t].thread, NULL, (void* (*)(void*))ycsb_thread_run, &THREADS[t]);
@@ -135,7 +135,7 @@ int main(int argc, char* argv[])
     for(t = 0; t < thread_num; ++t){
         inserted +=  THREADS[t].inserted;
     }
-    printf("Run phase finishes: %lu/%lu items are inserted/searched\n", operation_num - inserted, inserted);
+    printf("Run phase finishes: %llu/%llu items are inserted/searched\n", operation_num - inserted, inserted);
     printf("Run phase throughput: %f operations per second \n", READ_WRITE_NUM/single_time);	
     
     return 0;
