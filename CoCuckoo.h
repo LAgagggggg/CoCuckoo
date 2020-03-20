@@ -51,7 +51,7 @@ struct CocuckooHashTable
 
 
 CocuckooHashTable * cocuckooInit();
-int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType &value);
+int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType &value, bool needGlobalLock = true);
 DataType * cocuckooQuery(CocuckooHashTable &table, const DataType &key);
 int cocuckooRemove(CocuckooHashTable &table, const DataType &key);
 

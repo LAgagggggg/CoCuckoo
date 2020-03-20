@@ -48,7 +48,7 @@ void ycsb_thread_run(void* arg){
 */
 int main(int argc, char* argv[])
 {        
-    int thread_num = 2;             // INPUT: the number of threads
+    int thread_num = 4;             // INPUT: the number of threads
     bool readFromFile = false;
 
     CocuckooHashTable &table = *cocuckooInit();

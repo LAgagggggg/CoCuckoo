@@ -3,7 +3,7 @@
 #include "MurmurHash3.h"
 #include "hash.h"
 
-#define __SC_POWER 8;
+#define __SC_POWER 17;
 static const uint64_t INIT_SIZE = 1 << __SC_POWER;
 static const uint64_t KICK_THRESHOLD = 100;
 
@@ -12,10 +12,17 @@ using namespace std;
 typedef string Key;
 typedef uint64_t HashValueType;
 
+struct LockedSubgraphNumbers
+{
+    int a;
+    int b;
+};
+
+
 //******** Function Declare ********
 int cocuckooDoubleSize(CocuckooHashTable &table);
 bool performKickOut(CocuckooHashTable &table, KeyValueItem item, int positon);
-void lockTwoSubgraph(CocuckooHashTable &table, HashValueType pos1, HashValueType pos2);
+LockedSubgraphNumbers lockTwoSubgraph(CocuckooHashTable &table, HashValueType pos1, HashValueType pos2);
 void lockSubgraph(CocuckooHashTable &table, int subgraphNumber);
 void unlockSubgraph(CocuckooHashTable &table, int subgraphNumber);
 void atomicAssignSubgraphNumber(CocuckooHashTable &table, HashValueType pos, int subgraphNumber);
@@ -46,7 +53,7 @@ static HashValue Hash(CocuckooHashTable &table, const DataType &k)
 
 void generate_seeds(CocuckooHashTable * table)
 {
-    // srand(time(NULL));
+    srand(time(NULL));
     do
     {
         table->seeds[0] = rand();
@@ -85,8 +92,10 @@ CocuckooHashTable *cocuckooInit()
     return table;
 }
 
-int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType &value)
+int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType &value, bool needGlobalLock)
 {
+
+    if (needGlobalLock) lockFulltableForResizing(table, false);
 
     int ha, hb;
     auto hashValue = Hash(table, key);
@@ -97,37 +106,35 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
     // wrap data
     KeyValueItem item = {.occupied = true, .key = key, .value = value};
 
-    lockFulltableForResizing(table, false);
-
     UFSet & ufsetP = *(table.ufsetP);
     bool * isSubgraphMaximal = table.isSubgraphMaximal;
 
     int subgraphNumberA = find(&ufsetP,ha);
     int subgraphNumberB = find(&ufsetP,hb);
-    lockTwoSubgraph(table, ha, hb);
+    LockedSubgraphNumbers lockedSubgraphNumbers = lockTwoSubgraph(table, ha, hb);
     
 
     // Update Value
     if (table.data[ha].key == value)
     {
         table.data[ha].value = value;
-        unlockSubgraph(table, subgraphNumberA);
-        if (subgraphNumberA != subgraphNumberB) 
+        unlockSubgraph(table, lockedSubgraphNumbers.a);
+        if (lockedSubgraphNumbers.a != lockedSubgraphNumbers.b) 
         {
-            unlockSubgraph(table, subgraphNumberB);
+            unlockSubgraph(table, lockedSubgraphNumbers.b);
         }
-        unlockFulltableForResizing(table, false);
+        if (needGlobalLock) unlockFulltableForResizing(table, false);
         return 1;
     }
     if (table.data[hb].key == value)
     {
         table.data[hb].value = value;
-        unlockSubgraph(table, subgraphNumberA);
-        if (subgraphNumberA != subgraphNumberB) 
+        unlockSubgraph(table, lockedSubgraphNumbers.a);
+        if (lockedSubgraphNumbers.a != lockedSubgraphNumbers.b) 
         {
-            unlockSubgraph(table, subgraphNumberB);
+            unlockSubgraph(table, lockedSubgraphNumbers.b);
         }
-        unlockFulltableForResizing(table, false);
+        if (needGlobalLock) unlockFulltableForResizing(table, false);
         return 1;
     }
 
@@ -147,8 +154,8 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
         table.count++;
         
         // table.isSubgraphMaximal[ha] = false;
-        unlockSubgraph(table, subgraphNumber);
-        unlockFulltableForResizing(table, false);
+        unlockSubgraph(table, lockedSubgraphNumbers.a);
+        if (needGlobalLock) unlockFulltableForResizing(table, false);
 
         return 0;
     }
@@ -168,7 +175,7 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
         table.data[ha] = item;
         table.count++;
 
-        unlockFulltableForResizing(table, false);
+        if (needGlobalLock) unlockFulltableForResizing(table, false);
 
         return 0;
     }
@@ -184,7 +191,7 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
         table.data[hb] = item;
         table.count++;
 
-        unlockFulltableForResizing(table, false);
+        if (needGlobalLock) unlockFulltableForResizing(table, false);
 
         return 0;
     }
@@ -193,14 +200,14 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
     if (isSubgraphMaximal[subgraphNumberA] && isSubgraphMaximal[subgraphNumberB]) {
         printf("Insert fail predicted! Should resize now\n");
 
-        unlockSubgraph(table, subgraphNumberA);
-        if (subgraphNumberA != subgraphNumberB) 
+        unlockSubgraph(table, lockedSubgraphNumbers.a);
+        if (lockedSubgraphNumbers.a != lockedSubgraphNumbers.b) 
         {
-            unlockSubgraph(table, subgraphNumberB);
+            unlockSubgraph(table, lockedSubgraphNumbers.b);
         }
 
         // unlock read lock before resizing
-        unlockFulltableForResizing(table, false);
+        if (needGlobalLock) unlockFulltableForResizing(table, false);
 
         cocuckooDoubleSize(table);
         cocuckooInsert(table, key, value);
@@ -212,10 +219,10 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
         {
             // printf("InsertSameNon\n");
             isSubgraphMaximal[subgraphNumberA] = true;
-            unlockSubgraph(table, subgraphNumberA);
+            unlockSubgraph(table, lockedSubgraphNumbers.a);
             performKickOut(table, item, ha);
 
-            unlockFulltableForResizing(table, false);
+            if (needGlobalLock) unlockFulltableForResizing(table, false);
 
             return 0;
         }
@@ -227,10 +234,10 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
 
             table.subgraphIDs[ha] = find(&ufsetP, ha);
             table.subgraphIDs[hb] = table.subgraphIDs[ha];
-            unlockSubgraph(table, table.subgraphIDs[ha]);
-            unlockSubgraph(table, table.subgraphIDs[hb]);
+            unlockSubgraph(table, lockedSubgraphNumbers.a);
+            unlockSubgraph(table, lockedSubgraphNumbers.b);
 
-            unlockFulltableForResizing(table, false);
+            if (needGlobalLock) unlockFulltableForResizing(table, false);
             
             return 0;
         }
@@ -238,12 +245,12 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
     else if (isSubgraphMaximal[subgraphNumberA]) {
             // printf("InsertDiffNonMax\n");
             isSubgraphMaximal[subgraphNumberB] = true;
-            unlockSubgraph(table, subgraphNumberA);
-            unlockSubgraph(table, subgraphNumberB);
+            unlockSubgraph(table, lockedSubgraphNumbers.a);
+            unlockSubgraph(table, lockedSubgraphNumbers.b);
 
             performKickOut(table, item, ha);
 
-            unlockFulltableForResizing(table, false);
+            if (needGlobalLock) unlockFulltableForResizing(table, false);
 
             merge(&ufsetP, ha, hb);
             return 0;
@@ -251,173 +258,19 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
     else {
             // printf("InsertDiffNonMax\n");
             isSubgraphMaximal[subgraphNumberA] = true;
-            unlockSubgraph(table, subgraphNumberA);
-            unlockSubgraph(table, subgraphNumberB);
+            unlockSubgraph(table, lockedSubgraphNumbers.a);
+            unlockSubgraph(table, lockedSubgraphNumbers.b);
 
             performKickOut(table, item, hb);
 
-            unlockFulltableForResizing(table, false);
+            if (needGlobalLock) unlockFulltableForResizing(table, false);
 
             merge(&ufsetP, ha, hb);
             return 0;
     }
 
     printf("Shouldn't be here!\n");
-    unlockFulltableForResizing(table, false);
-    return 0;
-}
-
-int __lockFreeInsert(CocuckooHashTable &table, const DataType &key, const DataType &value)
-{
-
-    int ha, hb;
-    auto hashValue = Hash(table, key);
-    ha = hashValue.a;
-    hb = hashValue.b;
-    // printf("hash of %s: %u & %u\n", key.c_str(), ha, hb);
-    
-    // wrap data
-    KeyValueItem item = {.occupied = true, .key = key, .value = value};
-
-    UFSet & ufsetP = *(table.ufsetP);
-    bool * isSubgraphMaximal = table.isSubgraphMaximal;
-
-    lockTwoSubgraph(table, ha, hb);
-    int subgraphNumberA = find(&ufsetP,ha);
-    int subgraphNumberB = find(&ufsetP,hb);
-
-    // TwoEmpty
-    if (table.subgraphIDs[ha] == -1 && table.subgraphIDs[hb] == -1)
-    {
-        // printf("Insert: TwoEmpty\n");
-
-        // modify graph
-        ufsetP.id[ha] = hb;
-        int subgraphNumber = find(&ufsetP, ha);
-        atomicAssignSubgraphNumber(table, ha, subgraphNumber);
-        atomicAssignSubgraphNumber(table, hb, subgraphNumber);
-
-        // modified table
-        table.data[ha] = item;
-        table.count++;
-        
-        // table.isSubgraphMaximal[ha] = false;
-        unlockSubgraph(table, subgraphNumber);
-
-
-        return 0;
-    }
-    
-
-    // OneEmpty
-    // If one of the buckets is valid, do insert
-    if (table.subgraphIDs[ha] == -1)
-    {
-        // printf("Insert: OneEmpty\n");
-
-        // modify graph
-        ufsetP.id[ha] = hb;
-        atomicAssignSubgraphNumber(table, ha, table.subgraphIDs[hb]);
-
-        //TODO: Atomic?
-        table.data[ha] = item;
-        table.count++;
-
-
-
-        return 0;
-    }
-    else if (table.subgraphIDs[hb] == -1)
-    {
-        // printf("Insert: OneEmpty\n");
-
-        // modify graph
-        ufsetP.id[hb] = ha;
-        atomicAssignSubgraphNumber(table, hb, table.subgraphIDs[ha]);
-
-        //TODO: Atomic?
-        table.data[hb] = item;
-        table.count++;
-
-
-
-        return 0;
-    }
-
-    // ZeroEmpty
-    if (isSubgraphMaximal[subgraphNumberA] && isSubgraphMaximal[subgraphNumberB]) {
-        printf("Insert fail predicted! Should resize now\n");
-
-        unlockSubgraph(table, subgraphNumberA);
-        if (subgraphNumberA != subgraphNumberB) 
-        {
-            unlockSubgraph(table, subgraphNumberB);
-        }
-
-        // unlock read lock before resizing
-
-
-        cocuckooDoubleSize(table);
-        cocuckooInsert(table, key, value);
-        return 0;
-    }
-    else if (!isSubgraphMaximal[subgraphNumberA] && !isSubgraphMaximal[subgraphNumberB]) {
-        // if (table.subgraphIDs[ha] == table.subgraphIDs[hb])
-        if (subgraphNumberA == subgraphNumberB)
-        {
-            // printf("InsertSameNon\n");
-            isSubgraphMaximal[subgraphNumberA] = true;
-            unlockSubgraph(table, subgraphNumberA);
-            performKickOut(table, item, ha);
-
-    
-
-            return 0;
-        }
-        else
-        {
-            // printf("InsertDiffNonNon\n");
-            performKickOut(table, item, ha);
-            merge(&ufsetP, ha, hb);
-
-            table.subgraphIDs[ha] = find(&ufsetP, ha);
-            table.subgraphIDs[hb] = table.subgraphIDs[ha];
-            unlockSubgraph(table, table.subgraphIDs[ha]);
-            unlockSubgraph(table, table.subgraphIDs[hb]);
-
-    
-            
-            return 0;
-        }
-    }
-    else if (isSubgraphMaximal[subgraphNumberA]) {
-            // printf("InsertDiffNonMax\n");
-            isSubgraphMaximal[subgraphNumberB] = true;
-            unlockSubgraph(table, subgraphNumberA);
-            unlockSubgraph(table, subgraphNumberB);
-
-            performKickOut(table, item, ha);
-
-    
-
-            merge(&ufsetP, ha, hb);
-            return 0;
-    }
-    else {
-            // printf("InsertDiffNonMax\n");
-            isSubgraphMaximal[subgraphNumberA] = true;
-            unlockSubgraph(table, subgraphNumberA);
-            unlockSubgraph(table, subgraphNumberB);
-
-            performKickOut(table, item, hb);
-
-    
-
-            merge(&ufsetP, ha, hb);
-            return 0;
-    }
-
-    printf("Shouldn't be here!\n");
+    if (needGlobalLock) unlockFulltableForResizing(table, false);
     return 0;
 }
 
@@ -428,12 +281,6 @@ bool performKickOut(CocuckooHashTable &table, KeyValueItem item, int insertPosit
     for (int i = 0; i < table.size; i++)
     {
         table.data[insertPosition] = insertItem;
-
-        if (!kickedItem.occupied)
-        {
-            table.count++;
-            return true;
-        }
         
         auto hashValue = Hash(table, kickedItem.key);
         int alternatePositon = hashValue.a == insertPosition ? hashValue.b : hashValue.a;
@@ -497,7 +344,7 @@ int cocuckooDoubleSize(CocuckooHashTable &table)
         KeyValueItem &item = oldData[i];
         if (item.occupied)
         {
-            __lockFreeInsert(table, item.key, item.value);
+            cocuckooInsert(table, item.key, item.value, false);
         }
     }
 
@@ -510,14 +357,14 @@ int cocuckooDoubleSize(CocuckooHashTable &table)
 DataType *cocuckooQuery(CocuckooHashTable &table, const DataType &key)
 {
 
+    //TODO: lock
+
+    lockFulltableForResizing(table, false);
+
     int ha, hb;
     auto hashValue = Hash(table, key);
     ha = hashValue.a;
     hb = hashValue.b;
-
-    //TODO: lock
-
-    lockFulltableForResizing(table, false);
 
     if (table.data[ha].occupied &&  table.data[ha].key == key)
     {
@@ -561,18 +408,14 @@ int cocuckooRemove(CocuckooHashTable &table, const DataType &key)
 
 spinlock lockForLockingSubgraph;
 
-void lockTwoSubgraph(CocuckooHashTable &table, HashValueType pos1, HashValueType pos2) {
+LockedSubgraphNumbers lockTwoSubgraph(CocuckooHashTable &table, HashValueType pos1, HashValueType pos2) {
     while (1)
     {
         int subgraphNumberA = table.subgraphIDs[find(table.ufsetP, pos1)];
         int subgraphNumberB = table.subgraphIDs[find(table.ufsetP, pos2)];
-        // if (subgraphNumberB < subgraphNumberA)
-        // {
-        //     swap(subgraphNumberA, subgraphNumberB);
-        // }
         if (subgraphNumberA == -1 || subgraphNumberB == -1) // one of the subgraphs is empty, no need of locking
         {
-            return;
+            return {-1, -1};
         }
         else
         {   
@@ -588,13 +431,9 @@ void lockTwoSubgraph(CocuckooHashTable &table, HashValueType pos1, HashValueType
         // Check
         int asubgraphNumberA = table.subgraphIDs[find(table.ufsetP, pos1)];
         int asubgraphNumberB = table.subgraphIDs[find(table.ufsetP, pos2)];
-        // if (asubgraphNumberB < asubgraphNumberA)
-        // {
-        //     swap(asubgraphNumberA, asubgraphNumberB);
-        // }
         if (subgraphNumberA == asubgraphNumberA && subgraphNumberB == asubgraphNumberB)
         {
-            break;
+            return {subgraphNumberA, subgraphNumberB};
         }
         else
         {
@@ -609,13 +448,22 @@ void lockTwoSubgraph(CocuckooHashTable &table, HashValueType pos1, HashValueType
 }
 
 void lockSubgraph(CocuckooHashTable &table, int pos) {
-    printf("locking: %d\n", pos);
-    spin_lock(&table.locks[pos]);
+    // printf("try locking: %d\n", pos);
+    if (pos != -1)
+    {
+        spin_lock(&table.locks[pos]);
+    }
+    
+    // printf("locked: %d\n", pos);
 }
 
 void unlockSubgraph(CocuckooHashTable &table, int pos) {
-    printf("unlocking: %d\n", pos);
-    spin_unlock(&table.locks[pos]);
+    // printf("try unlocking: %d\n", pos);
+    if (pos != -1)
+    {
+        spin_unlock(&table.locks[pos]);
+    }
+    // printf("unlocked: %d\n", pos);
 }
 
 void atomicAssignSubgraphNumber(CocuckooHashTable &table, HashValueType pos, int subgraphNumber){
