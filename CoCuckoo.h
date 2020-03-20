@@ -35,7 +35,6 @@ struct CocuckooHashTable
     KeyValueItem * data;
     int * subgraphIDs;
     uint64_t size; // Amount of buckets
-    uint64_t count; // Buckets used
     uint64_t seeds[2]; // Seed for hash
     UFSet * ufsetP; // Pointer of UFSet
     bool * isSubgraphMaximal;

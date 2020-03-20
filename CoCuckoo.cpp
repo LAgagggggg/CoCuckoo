@@ -25,7 +25,7 @@ bool performKickOut(CocuckooHashTable &table, KeyValueItem item, int positon);
 LockedSubgraphNumbers lockTwoSubgraph(CocuckooHashTable &table, HashValueType pos1, HashValueType pos2);
 void lockSubgraph(CocuckooHashTable &table, int subgraphNumber);
 void unlockSubgraph(CocuckooHashTable &table, int subgraphNumber);
-void atomicAssignSubgraphNumber(CocuckooHashTable &table, HashValueType pos, int subgraphNumber);
+bool atomicAssignSubgraphNumber(CocuckooHashTable &table, HashValueType pos, int subgraphNumber);
 void lockFulltableForResizing(CocuckooHashTable &table, bool write);
 void unlockFulltableForResizing(CocuckooHashTable &table, bool write);
 //**********************************
@@ -71,7 +71,6 @@ CocuckooHashTable *cocuckooInit()
     CocuckooHashTable *table = (CocuckooHashTable *)(calloc(1, sizeof(CocuckooHashTable)));
     table->data = (KeyValueItem *)(calloc(INIT_SIZE, sizeof(KeyValueItem)));
     table->size = INIT_SIZE;
-    table->count = 0;
     table->isSubgraphMaximal = (bool *)(calloc(INIT_SIZE, sizeof(bool)));
     table->subgraphIDs = (int *)(calloc(INIT_SIZE, sizeof(int)));
     table->ufsetP = newUFSet(INIT_SIZE);
@@ -112,6 +111,7 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
     int subgraphNumberA = find(&ufsetP,ha);
     int subgraphNumberB = find(&ufsetP,hb);
     LockedSubgraphNumbers lockedSubgraphNumbers = lockTwoSubgraph(table, ha, hb);
+
     
 
     // Update Value
@@ -144,17 +144,22 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
         // printf("Insert: TwoEmpty\n");
 
         // modify graph
-        ufsetP.id[ha] = hb;
-        int subgraphNumber = find(&ufsetP, ha);
-        atomicAssignSubgraphNumber(table, ha, subgraphNumber);
-        atomicAssignSubgraphNumber(table, hb, subgraphNumber);
-
+        lockSubgraph(table, hb);
+        int subgraphNumber = hb;
+        if (!atomicAssignSubgraphNumber(table, ha, subgraphNumber) || !atomicAssignSubgraphNumber(table, hb, subgraphNumber))
+        {
+            // restart insert process
+            unlockSubgraph(table, hb);
+            if (needGlobalLock) unlockFulltableForResizing(table, false);
+            cocuckooInsert(table, key, value);
+            return 0;
+        }
+        
         // modified table
         table.data[ha] = item;
-        table.count++;
         
         // table.isSubgraphMaximal[ha] = false;
-        unlockSubgraph(table, lockedSubgraphNumbers.a);
+        unlockSubgraph(table, hb);
         if (needGlobalLock) unlockFulltableForResizing(table, false);
 
         return 0;
@@ -166,14 +171,18 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
     if (table.subgraphIDs[ha] == -1)
     {
         // printf("Insert: OneEmpty\n");
-
+        
         // modify graph
-        ufsetP.id[ha] = hb;
-        atomicAssignSubgraphNumber(table, ha, table.subgraphIDs[hb]);
-
+        if (!atomicAssignSubgraphNumber(table, ha, table.subgraphIDs[hb]))
+        {
+            // restart insert process
+            if (needGlobalLock) unlockFulltableForResizing(table, false);
+            cocuckooInsert(table, key, value);
+            return 0;
+        }
+        
         //TODO: Atomic?
         table.data[ha] = item;
-        table.count++;
 
         if (needGlobalLock) unlockFulltableForResizing(table, false);
 
@@ -182,14 +191,18 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
     else if (table.subgraphIDs[hb] == -1)
     {
         // printf("Insert: OneEmpty\n");
-
+        
         // modify graph
-        ufsetP.id[hb] = ha;
-        atomicAssignSubgraphNumber(table, hb, table.subgraphIDs[ha]);
-
+        if (!atomicAssignSubgraphNumber(table, hb, table.subgraphIDs[ha]))
+        {
+            // restart insert process
+            if (needGlobalLock) unlockFulltableForResizing(table, false);
+            cocuckooInsert(table, key, value);
+            return 0;
+        }
+        
         //TODO: Atomic?
         table.data[hb] = item;
-        table.count++;
 
         if (needGlobalLock) unlockFulltableForResizing(table, false);
 
@@ -289,7 +302,6 @@ bool performKickOut(CocuckooHashTable &table, KeyValueItem item, int insertPosit
         {
             // put in and insert successed
             table.data[alternatePositon] = kickedItem;
-            table.count++;
             return true;
         }
         else
@@ -330,8 +342,6 @@ int cocuckooDoubleSize(CocuckooHashTable &table)
     freeFighter = table.locks;
     table.locks = (spinlock *)calloc(table.size, sizeof(spinlock));
     free(freeFighter);
-
-    table.count = 0;
 
     // subgraphID default to -1
     for (int i = 0; i < table.size; i++)
@@ -466,10 +476,23 @@ void unlockSubgraph(CocuckooHashTable &table, int pos) {
     // printf("unlocked: %d\n", pos);
 }
 
-void atomicAssignSubgraphNumber(CocuckooHashTable &table, HashValueType pos, int subgraphNumber){
+bool atomicAssignSubgraphNumber(CocuckooHashTable &table, HashValueType pos, int subgraphNumber){
     spin_lock(&table.lockForSubgraphIDs);
-    table.subgraphIDs[pos] = subgraphNumber;
+    bool result = true;
+    if (table.subgraphIDs[pos] != -1) // Means another thread has changed this 
+    {
+        result = false;
+    }
+    else
+    {
+        if (pos != subgraphNumber)
+        {
+            table.ufsetP->id[pos] = subgraphNumber;
+        }
+        table.subgraphIDs[pos] = subgraphNumber;
+    }
     spin_unlock(&table.lockForSubgraphIDs);
+    return result;
 }
 
 void lockFulltableForResizing(CocuckooHashTable &table, bool write) {
