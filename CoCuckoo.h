@@ -41,6 +41,11 @@ struct CocuckooHashTable
     bool * isSubgraphMaximal;
     spinlock * locks;
     spinlock lockForSubgraphIDs;
+    pthread_rwlock_t  lockForResizing;
+    spinlock writeLock;
+    spinlock readLock;
+    bool resizing;
+    int readerCount;
     uint32_t thread_num;
 };
 

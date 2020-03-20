@@ -6,7 +6,7 @@ using namespace std;
 
 #define KEY_LEN 16                        // The maximum length of a key
 #define VALUE_LEN 15                      // The maximum length of a value
-#define READ_WRITE_NUM 350000             // The total number of read and write operations in the workload
+#define READ_WRITE_NUM 100000             // The total number of read and write operations in the workload
 
 typedef struct thread_queue{
     string key;
@@ -48,7 +48,7 @@ void ycsb_thread_run(void* arg){
 */
 int main(int argc, char* argv[])
 {        
-    int thread_num = 4;             // INPUT: the number of threads
+    int thread_num = 2;             // INPUT: the number of threads
     bool readFromFile = false;
 
     CocuckooHashTable &table = *cocuckooInit();
@@ -118,7 +118,7 @@ int main(int argc, char* argv[])
     }
     else {
         //insert into CoCuckoo
-        for (int i = 0; i < 100; i++)
+        for (int i = 0; i < READ_WRITE_NUM; i++)
         {
             string s = "test";
             s += to_string(i);
@@ -152,11 +152,11 @@ int main(int argc, char* argv[])
     for(t = 0; t < thread_num; ++t){
         inserted +=  THREADS[t].inserted;
     }
-    printf("Run phase finishes: %lu/%lu items are inserted/searched\n", operation_num - inserted, inserted);
+    printf("Run phase finishes: %lu/%lu items are inserted/searched\n", inserted, operation_num - inserted);
     printf("Run phase throughput: %f operations per second \n", READ_WRITE_NUM/single_time);	
     
     //check
-    printTable(table);
+    // printTable(table);
     for (int i = 0; i < inserted; i++)
     {
         string s = "test";
