@@ -317,7 +317,18 @@ bool performKickOut(CocuckooHashTable &table, KeyValueItem item, int insertPosit
 
 int cocuckooDoubleSize(CocuckooHashTable &table)
 {
+    uint64_t sizeCheck = table.size;
+
     lockFulltableForResizing(table, true);
+
+    if (table.size != sizeCheck) // Means another thread has just doubled size
+    {
+        // No need of resizing
+        printf("No need of resizing\n");
+        unlockFulltableForResizing(table, true);
+        return -1;
+    }
+    
 
     void * freeFighter;
     
@@ -362,6 +373,8 @@ int cocuckooDoubleSize(CocuckooHashTable &table)
     unlockFulltableForResizing(table, true);
 
     free(oldData);
+
+    return 0;
 }
 
 DataType *cocuckooQuery(CocuckooHashTable &table, const DataType &key)
