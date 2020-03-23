@@ -3,7 +3,7 @@
 #include "MurmurHash3.h"
 #include "hash.h"
 
-#define __SC_POWER 17;
+#define __SC_POWER 15;
 static const uint64_t INIT_SIZE = 1 << __SC_POWER;
 static const uint64_t KICK_THRESHOLD = 100;
 
@@ -18,10 +18,9 @@ struct LockedSubgraphNumbers
     int b;
 };
 
-
 //******** Function Declare ********
 int cocuckooDoubleSize(CocuckooHashTable &table);
-bool performKickOut(CocuckooHashTable &table, KeyValueItem item, int positon);
+bool performKickOut(CocuckooHashTable &table, KeyValueItem item, int, int);
 LockedSubgraphNumbers lockTwoSubgraph(CocuckooHashTable &table, HashValueType pos1, HashValueType pos2);
 void lockSubgraph(CocuckooHashTable &table, int subgraphNumber);
 void unlockSubgraph(CocuckooHashTable &table, int subgraphNumber);
@@ -53,7 +52,7 @@ static HashValue Hash(CocuckooHashTable &table, const DataType &k)
 
 void generate_seeds(CocuckooHashTable * table)
 {
-    srand(time(NULL));
+    // srand(time(NULL));
     do
     {
         table->seeds[0] = rand();
@@ -100,16 +99,16 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
     auto hashValue = Hash(table, key);
     ha = hashValue.a;
     hb = hashValue.b;
-    // printf("hash of %s: %u & %u\n", key.c_str(), ha, hb);
+    // printf("Inserting: hash of %s: %u & %u\n", key.c_str(), ha, hb);
     
     // wrap data
     KeyValueItem item = {.occupied = true, .key = key, .value = value};
 
-    UFSet & ufsetP = *(table.ufsetP);
+    UFSet & ufset = *(table.ufsetP);
     bool * isSubgraphMaximal = table.isSubgraphMaximal;
 
-    int subgraphNumberA = find(&ufsetP,ha);
-    int subgraphNumberB = find(&ufsetP,hb);
+    int subgraphNumberA = find(&ufset,ha);
+    int subgraphNumberB = find(&ufset,hb);
     LockedSubgraphNumbers lockedSubgraphNumbers = lockTwoSubgraph(table, ha, hb);
 
     
@@ -154,6 +153,8 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
             cocuckooInsert(table, key, value);
             return 0;
         }
+
+        addReEdge(ufset, hb, ha);
         
         // modified table
         table.data[ha] = item;
@@ -180,6 +181,8 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
             cocuckooInsert(table, key, value);
             return 0;
         }
+
+        addReEdge(ufset, hb, ha);
         
         //TODO: Atomic?
         table.data[ha] = item;
@@ -200,6 +203,8 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
             cocuckooInsert(table, key, value);
             return 0;
         }
+
+        addReEdge(ufset, ha, hb);
         
         //TODO: Atomic?
         table.data[hb] = item;
@@ -233,7 +238,7 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
             // printf("InsertSameNon\n");
             isSubgraphMaximal[subgraphNumberA] = true;
             unlockSubgraph(table, lockedSubgraphNumbers.a);
-            performKickOut(table, item, ha);
+            performKickOut(table, item, ha, hb);
 
             if (needGlobalLock) unlockFulltableForResizing(table, false);
 
@@ -242,10 +247,10 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
         else
         {
             // printf("InsertDiffNonNon\n");
-            performKickOut(table, item, ha);
-            merge(&ufsetP, ha, hb);
+            performKickOut(table, item, ha, hb);
+            merge(&ufset, ha, hb);
 
-            table.subgraphIDs[ha] = find(&ufsetP, ha);
+            table.subgraphIDs[ha] = find(&ufset, ha);
             table.subgraphIDs[hb] = table.subgraphIDs[ha];
             unlockSubgraph(table, lockedSubgraphNumbers.a);
             unlockSubgraph(table, lockedSubgraphNumbers.b);
@@ -261,11 +266,11 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
             unlockSubgraph(table, lockedSubgraphNumbers.a);
             unlockSubgraph(table, lockedSubgraphNumbers.b);
 
-            performKickOut(table, item, ha);
+            performKickOut(table, item, ha, hb);
 
             if (needGlobalLock) unlockFulltableForResizing(table, false);
 
-            merge(&ufsetP, ha, hb);
+            merge(&ufset, ha, hb);
             return 0;
     }
     else {
@@ -274,11 +279,11 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
             unlockSubgraph(table, lockedSubgraphNumbers.a);
             unlockSubgraph(table, lockedSubgraphNumbers.b);
 
-            performKickOut(table, item, hb);
+            performKickOut(table, item, hb, ha);
 
             if (needGlobalLock) unlockFulltableForResizing(table, false);
 
-            merge(&ufsetP, ha, hb);
+            merge(&ufset, ha, hb);
             return 0;
     }
 
@@ -287,9 +292,13 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
     return 0;
 }
 
-bool performKickOut(CocuckooHashTable &table, KeyValueItem item, int insertPosition) {
+bool performKickOut(CocuckooHashTable &table, KeyValueItem item, int insertPosition, int backupPosition) {
     KeyValueItem insertItem = item;
     KeyValueItem kickedItem = table.data[insertPosition];
+
+    // Handling re_edge
+    UFSet & ufset = *(table.ufsetP);
+    addReEdge(ufset, backupPosition, insertPosition);
 
     for (int i = 0; i < table.size; i++)
     {
@@ -297,6 +306,9 @@ bool performKickOut(CocuckooHashTable &table, KeyValueItem item, int insertPosit
         
         auto hashValue = Hash(table, kickedItem.key);
         int alternatePositon = hashValue.a == insertPosition ? hashValue.b : hashValue.a;
+
+        addReEdge(ufset, insertPosition, alternatePositon);
+        removeReEdge(ufset, alternatePositon, insertPosition);
 
         if (!table.data[alternatePositon].occupied)
         {
@@ -346,9 +358,8 @@ int cocuckooDoubleSize(CocuckooHashTable &table)
     table.subgraphIDs = (int *)(calloc(table.size, sizeof(int)));
     free(freeFighter);
 
-    freeFighter = table.ufsetP;
+    freeUFSet(table.ufsetP);
     table.ufsetP = newUFSet(table.size);
-    free(freeFighter);
 
     freeFighter = table.locks;
     table.locks = (spinlock *)calloc(table.size, sizeof(spinlock));
@@ -408,25 +419,73 @@ DataType *cocuckooQuery(CocuckooHashTable &table, const DataType &key)
 
 int cocuckooRemove(CocuckooHashTable &table, const DataType &key)
 {
+    lockFulltableForResizing(table, false);
+
     int ha, hb;
     auto hashValue = Hash(table, key);
     ha = hashValue.a;
     hb = hashValue.b;
+    // printf("Removing: hash of %s: %u & %u\n", key.c_str(), ha, hb);
+    int pos = -1;
+
+    LockedSubgraphNumbers lockedSubgraphNumbers = lockTwoSubgraph(table, ha, hb);
 
     if (table.data[ha].occupied && table.data[ha].key == key)
     {
-        table.data[ha].occupied = false;
-        return 0;
+        pos = ha;
     }
     else if (table.data[hb].occupied && table.data[hb].key == key)
     {
-        table.data[hb].occupied = false;
-        return 0;
+        pos = hb;
     }
     else
     {
+        unlockSubgraph(table, lockedSubgraphNumbers.a);
+        unlockSubgraph(table, lockedSubgraphNumbers.b);
+        unlockFulltableForResizing(table, false);
         return -1;
     }
+
+    table.data[pos].occupied = false;
+
+    // Modify graph
+    UFSet & ufset = *(table.ufsetP);
+
+    ufset.id[pos] = -1;
+    if (ufset.re_edge->at(pos).size() == 0) // No other node point to this node
+    {
+        table.subgraphIDs[pos] = -1;
+        unlockSubgraph(table, lockedSubgraphNumbers.a);
+        unlockSubgraph(table, lockedSubgraphNumbers.b);
+        unlockFulltableForResizing(table, false);
+        return 0;
+    }
+
+    vector<int> queue;
+    queue.push_back(pos);
+    int newRoot = pos;
+
+    while (!queue.empty())
+    {
+        int node = queue.back();
+        queue.pop_back();
+        const unordered_set<int> & re_edgeSet = ufset.re_edge->at(node);
+        for(unordered_set<int>::iterator it = re_edgeSet.begin();it!=re_edgeSet.end();it++)
+        {
+            queue.push_back(*it);   
+        }
+
+        table.subgraphIDs[node] = newRoot;
+        if (node != newRoot)
+        {
+            ufset.id[node] = newRoot;
+        }
+    }
+
+    unlockSubgraph(table, lockedSubgraphNumbers.a);
+    unlockSubgraph(table, lockedSubgraphNumbers.b);
+    unlockFulltableForResizing(table, false);
+    return 0;
 }
 
 spinlock lockForLockingSubgraph;

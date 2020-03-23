@@ -16,20 +16,29 @@ int main(int argc, char const *argv[])
     insert("wtf");
     
     //insert into CoCuckoo
-    for (int i = 0; i < 50000; i++)
+    int insertNumber = 100;
+
+    for (int i = 0; i < insertNumber; i++)
     {
         string s = "test";
-        s += to_string(i);
-        // if (i==148) {
-        //     printTable(table);
-        // }
+        s += to_string(i);        
         cocuckooInsert(table, s, "value");
-        
+    }
+    for (int i = 0; i < insertNumber; i+=3)
+    {
+        string s = "test";
+        s += to_string(i);        
+        cocuckooRemove(table, s);
+    }
+    for (int i = insertNumber; i < 2 * insertNumber; i++)
+    {
+        string s = "test";
+        s += to_string(i);        
+        cocuckooInsert(table, s, "value");
     }
 
-    cocuckooRemove(table, "test100");
     //check
-    for (int i = 0; i < 50000; i++)
+    for (int i = 0; i < 2 * insertNumber; i++)
     {
         string s = "test";
         s += to_string(i);
