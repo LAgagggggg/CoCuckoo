@@ -1,4 +1,4 @@
-#include "CoCuckoo.h"
+#include "OriginalCuckoo.h"
 
 #define __SC_POWER 5;
 static const uint32_t INIT_SIZE = 1 << __SC_POWER;
@@ -34,7 +34,6 @@ CocuckooHashTable *cocuckooInit()
     CocuckooHashTable *table = (CocuckooHashTable *)(malloc(sizeof(CocuckooHashTable)));
     table->data = (KeyValueItem *)(malloc(INIT_SIZE * sizeof(KeyValueItem)));
     table->size = INIT_SIZE;
-    table->count = 0;
 
     for (int i = 0; i < 2; i++)
     {
@@ -70,13 +69,11 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
     if (!table.data[ha].occupied)
     {
         table.data[ha] = item;
-        table.count++;
         return 0;
     }
     else if (!table.data[hb].occupied)
     {
         table.data[hb] = item;
-        table.count++;
         return 0;
     }
 
@@ -96,7 +93,6 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
         {
             // put in and insert successed
             table.data[alternatePositon] = kickedItem;
-            table.count++;
             return 0;
         }
         else
