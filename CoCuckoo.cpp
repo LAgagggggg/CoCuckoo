@@ -114,7 +114,7 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
     
 
     // Update Value
-    if (table.data[ha].key == value)
+    if (table.data[ha].key == key)
     {
         table.data[ha].value = value;
         unlockSubgraph(table, lockedSubgraphNumbers.a);
@@ -125,7 +125,7 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
         if (needGlobalLock) unlockFulltableForResizing(table, false);
         return 1;
     }
-    if (table.data[hb].key == value)
+    if (table.data[hb].key == key)
     {
         table.data[hb].value = value;
         unlockSubgraph(table, lockedSubgraphNumbers.a);
@@ -452,6 +452,7 @@ int cocuckooRemove(CocuckooHashTable &table, const DataType &key)
     UFSet & ufset = *(table.ufsetP);
 
     ufset.id[pos] = -1;
+    removeReEdge(ufset, pos == ha ? hb : ha, pos);
     if (ufset.re_edge->at(pos).size() == 0) // No other node point to this node
     {
         table.subgraphIDs[pos] = -1;

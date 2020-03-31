@@ -54,12 +54,12 @@ int cocuckooInsert(CocuckooHashTable &table, const DataType &key, const DataType
     KeyValueItem item = {.occupied = true, .key = key, .value = value};
 
     // Update Value
-    if (table.data[ha].key == value)
+    if (table.data[ha].key == key)
     {
         table.data[ha].value = value;
         return 1;
     }
-    if (table.data[hb].key == value)
+    if (table.data[hb].key == key)
     {
         table.data[hb].value = value;
         return 1;
